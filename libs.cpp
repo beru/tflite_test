@@ -1,0 +1,41 @@
+
+#pragma comment(lib, "c\\common.lo.lib")
+#pragma comment(lib, "core\\api\\api.lib")
+#pragma comment(lib, "delegates\\nnapi\\nnapi_delegate.lib")
+#pragma comment(lib, "kernels\\builtin_op_kernels.lib")
+#pragma comment(lib, "kernels\\builtin_ops_all_linked.lo.lib")
+#pragma comment(lib, "kernels\\reference_ops.lib")
+#pragma comment(lib, "kernels\\cpu_backend_context.lib")
+#pragma comment(lib, "kernels\\cpu_backend_gemm.lib")
+#pragma comment(lib, "kernels\\eigen_support.lib")
+#pragma comment(lib, "kernels\\kernel_util.lib")
+#pragma comment(lib, "kernels\\lstm_eval.lib")
+
+#pragma comment(lib, "kernels\\internal\\audio_utils.lib")
+#pragma comment(lib, "kernels\\internal\\kernel_utils.lib")
+#pragma comment(lib, "kernels\\internal\\neon_tensor_utils.lib")
+#pragma comment(lib, "kernels\\internal\\portable_tensor_utils.lib")
+#pragma comment(lib, "kernels\\internal\\quantization_util.lib")
+#pragma comment(lib, "kernels\\internal\\sse_tensor_utils.lib")
+#pragma comment(lib, "kernels\\internal\\tensor_utils.lib")
+#pragma comment(lib, "kernels\\internal\\transpose_utils.lib")
+
+#pragma comment(lib, "tools\\optimize\\sparsity\\format_converter.lib")
+
+#pragma comment(lib, "farmhash_archive\\farmhash.lib")
+#pragma comment(lib, "flatbuffers\\src\\flatbuffers.lib")
+#pragma comment(lib, "flatbuffers\\src\\flatc.lib")
+
+#pragma comment(lib, "fft2d\\fft2d.lib")
+
+#pragma comment(lib, "allocation.lib")
+#pragma comment(lib, "arena_planner.lib")
+#pragma comment(lib, "external_cpu_backend_context.lib")
+#pragma comment(lib, "framework_lib.lo.lib")
+#pragma comment(lib, "minimal_logging.lib")
+#pragma comment(lib, "simple_memory_arena.lib")
+#pragma comment(lib, "string_util.lib")
+#pragma comment(lib, "tensorflowlite.dll.if.lib")
+#pragma comment(lib, "tflite_with_xnnpack_optional.lib")
+#pragma comment(lib, "util.lib")
+
