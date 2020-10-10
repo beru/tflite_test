@@ -20,4 +20,15 @@ bazel build -c opt --cxxopt=--std=c++11 tensorflow/lite:tensorflowlite
 ```
 を追加してからビルドする。
 
+## Bazel
+
+https://github.com/bazelbuild/bazel/releases
+
+## EfficientNet
+
+https://tfhub.dev/tensorflow/lite-model/efficientnet/lite0/int8/1
+
+## ImageNet labels
+
+https://gist.github.com/yrevar/942d3a0ac09ec9e5eb3a
 
