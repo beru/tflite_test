@@ -2,3 +2,10 @@
 Quantization and Training of Neural Networks for EfficientInteger-Arithmetic-Only Inference
 https://arxiv.org/pdf/1712.05877.pdf
 
+TensorFlow Lite 8-bit quantization specification
+https://www.tensorflow.org/lite/performance/quantization_spec?hl=en
+
+# ....
+
+real_value = (int8_value - zero_point) * scale
+

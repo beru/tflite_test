@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ImportGroup Label="PropertySheets" />
+  <PropertyGroup Label="UserMacros">
+    <TensorFlowDir>c:\projects\tensorflow\</TensorFlowDir>
+  </PropertyGroup>
+  <PropertyGroup>
+    <IncludePath>$(TensorFlowDir);$(TensorFlowDir)\bazel-tensorflow\external\flatbuffers\include;$(IncludePath)</IncludePath>
+    <LibraryPath>$(TensorFlowDir)\bazel-out\x64_windows-opt\bin\tensorflow\lite;$(TensorFlowDir)\bazel-out\x64_windows-opt\bin\external;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <ItemDefinitionGroup />
+  <ItemGroup>
+    <BuildMacro Include="TensorFlowDir">
+      <Value>$(TensorFlowDir)</Value>
+      <EnvironmentVariable>true</EnvironmentVariable>
+    </BuildMacro>
+  </ItemGroup>
+</Project>

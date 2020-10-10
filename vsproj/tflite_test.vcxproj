@@ -68,6 +68,7 @@
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="tflite.props" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -78,13 +79,9 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>D:\projects\tensorflow\bazel-tensorflow\external\flatbuffers\include;D:\projects\tensorflow;$(IncludePath)</IncludePath>
-    <LibraryPath>D:\projects\tensorflow\bazel-out\x64_windows-opt\bin\external;D:\projects\tensorflow\bazel-out\x64_windows-opt\bin\tensorflow\lite;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>D:\projects\tensorflow\bazel-tensorflow\external\flatbuffers\include;D:\projects\tensorflow;$(IncludePath)</IncludePath>
-    <LibraryPath>D:\projects\tensorflow\bazel-out\x64_windows-opt\bin\external;D:\projects\tensorflow\bazel-out\x64_windows-opt\bin\tensorflow\lite;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
