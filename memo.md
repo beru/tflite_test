@@ -26,9 +26,13 @@ https://github.com/bazelbuild/bazel/releases
 
 ## EfficientNet
 
-https://tfhub.dev/tensorflow/lite-model/efficientnet/lite0/int8/1
+https://tfhub.dev/tensorflow/lite-model/efficientnet/lite0/int8/2
 
 ## ImageNet labels
 
 https://gist.github.com/yrevar/942d3a0ac09ec9e5eb3a
+
+## flatc
+
+https://github.com/google/flatbuffers/releases/download/v1.12.0/flatc_windows.zip
 

@@ -15,10 +15,10 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\Minimal.cpp">
+    <ClCompile Include="..\libs.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\libs.cpp">
+    <ClCompile Include="..\mimic_Quantize.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

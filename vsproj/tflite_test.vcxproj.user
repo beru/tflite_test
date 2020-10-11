@@ -5,8 +5,8 @@
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <LocalDebuggerEnvironment>PATH=%PATH%;D:\projects\tensorflow\bazel-out\x64_windows-opt\bin\tensorflow\lite</LocalDebuggerEnvironment>
+    <LocalDebuggerEnvironment>PATH=%PATH%;$(TensorFlowDir)\bazel-out\x64_windows-opt\bin\tensorflow\lite</LocalDebuggerEnvironment>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArguments>efficientnet-lite0-int8.tflite touhokunousagi2.jpg</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>test.png</LocalDebuggerCommandArguments>
   </PropertyGroup>
 </Project>
