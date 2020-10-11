@@ -18,7 +18,7 @@
     <ClCompile Include="..\libs.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\mimic_Quantize.cpp">
+    <ClCompile Include="..\Classification.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

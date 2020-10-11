@@ -15,14 +15,50 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb_image_write.h"
-
 void print(TfLiteIntArray* arr)
 {
   for (int i=0; i<arr->size; ++i) {
     printf("%d ", arr->data[i]);
   }
+}
+
+int calc_num_elements(const TfLiteIntArray* dims)
+{
+  int num = 1;
+  for (int i=0; i<dims->size; ++i) {
+    num *= dims->data[i];
+  }
+  return num;
+}
+
+int get_type_bytes(TfLiteType type)
+{
+  switch (type) {
+  case kTfLiteNoType: return -1;
+  case kTfLiteFloat32: return 4;
+  case kTfLiteInt32: return 4;
+  case kTfLiteUInt8: return 1;
+  case kTfLiteInt64: return 8;
+  case kTfLiteString: return -1;
+  case kTfLiteBool: return -1;
+  case kTfLiteInt16: return 2;
+  case kTfLiteComplex64: return 8;
+  case kTfLiteInt8: return 1;
+  case kTfLiteFloat16: return 2;
+  case kTfLiteFloat64: return 8;
+  case kTfLiteComplex128: return 16;
+  }
+  return -1;
+}
+
+void write_to_file(const char* filename, const TfLiteTensor* tensor)
+{
+  FILE* f = fopen(filename, "wb");
+  const TfLiteIntArray* dims = tensor->dims;
+  int num_elements = calc_num_elements(dims);
+  int type_bytes = get_type_bytes(tensor->type);
+  fwrite(tensor->data.data, type_bytes, num_elements, f);
+  fclose(f);
 }
 
 int main(int argc, char* argv[])
@@ -112,9 +148,14 @@ int main(int argc, char* argv[])
 
   status = interpreter->Invoke();
 
-  FILE* f = fopen("output.dat", "wb");
-  fwrite(output_data, 1, output_width * output_height * output_channels, f);
-  fclose(f);
+  const TfLiteIntArray* node1_inputs = nodes[1].first.inputs;
+  for (int i=0; i<node1_inputs->size; ++i) {
+    char fname[64];
+    sprintf(fname, "node1_input%d.dat", i);
+    int idx = node1_inputs->data[i];
+    write_to_file(fname, interpreter->tensor(idx));
+  }
+  write_to_file("node1_output.dat", output_tensor);
 
   return 0;
 }

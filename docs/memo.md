@@ -1,6 +1,29 @@
 
-# 
+# tflite::reference_integer_ops::ConvPerChannel について
 
+`tensorflow/lite/kernels/internal/reference/integer_ops/conv.h` ファイル内の `ConvPerChannel` 関数
+
+## 引数 output_multiplier と output_shift
+
+スケーリングやバイアスの加算は出力チャンネル単位で行うので、内側の3重ループ（フィルタ縦横と入力チャンネル）で値を集積した後に行っている。
+
+`MultiplyByQuantizedMultiplier` 関数を呼び出してスケーリング演算を行っている。`MultiplyByQuantizedMultiplier` 関数の実装は `tensorflow/lite/kernels/internal/common.h` ファイル内にあり、浮動小数点演算を使わず整数演算で行っているが、乗算と右シフトだけという単純なものでもないようだ。。
+
+スケーリングを整数演算で行う方法については、`1712.05877.pdf` の `2.2. Integer-arithmetic-only matrix multiplication` に記載されている。
+
+まず、式変形を行う事でスケーリングの乗算をまとめている。
+
+式5 : M = (入力のスケール × カーネルのスケール) ÷ 出力のスケール
+
+式6 : M = 2^-n * M0
+
+事前に `M0(output_multiplier)` と `n(output_shift)` を計算している。
+
+実装は、`tensorflow/lite/kernels/conv.cc` ファイル内の `tflite::ops::builtin::conv::Prepare` 関数で `tflite::PopulateConvolutionQuantizationParams` 関数を呼び出して行っている。
+
+`tflite::PopulateConvolutionQuantizationParams` 関数は `tensorflow/lite/kernels/kernel_util.cc` ファイル内にあり、ループ処理でチャンネル毎に式5の計算を double 精度で行った後に `QuantizeMultiplier` 関数を読んで `significand` と `channel_shift` を求めている。`significand` が `output_multiplier` に記録されて、`channel_shift` が `output_shift` に記録される。
+
+`QuantizeMultiplier` 関数は `tensorflow/lite/kernels/internal/quantization_util.cc` ファイル内に書かれている。
 
 # Netronの表示について
 
