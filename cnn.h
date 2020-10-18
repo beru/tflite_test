@@ -101,12 +101,6 @@ void Conv2D(
   }
 }
 
-template <typename T>
-T divide_by_shift(T x, int n)
-{
-  return x >> n;
-}
-
 inline
 void Conv2D_int8_int8(
   const Shape input_shape, const int8_t* input_values,
@@ -150,27 +144,24 @@ void Conv2D_int8_int8(
         int32_t sum = 0;
         const int32_t m0 = output_multiplier[out_ch];
         const int32_t n = output_shift[out_ch];
-        if (m0) {
-          for (int filter_y=0; filter_y<filter_height; ++filter_y) {
-            const int in_y = in_y_start + filter_y;
-            if (in_y < 0 || in_y >= input_height)
+        for (int filter_y=0; filter_y<filter_height; ++filter_y) {
+          const int in_y = in_y_start + filter_y;
+          if (in_y < 0 || in_y >= input_height)
+            continue;
+          for (int filter_x=0; filter_x<filter_width; ++filter_x) {
+            const int in_x = in_x_start + filter_x;
+            if (in_x < 0 || in_x >= input_width)
               continue;
-            for (int filter_x=0; filter_x<filter_width; ++filter_x) {
-              const int in_x = in_x_start + filter_x;
-              if (in_x < 0 || in_x >= input_width)
-                continue;
-              for (int in_ch=0; in_ch<input_depth; ++in_ch) {
-                int32_t input_value = input_values[input_shape.offset(0, in_y, in_x, in_ch)];
-                int32_t filter_value = filter_values[filter_shape.offset(out_ch, filter_y, filter_x, in_ch)];
-                sum += filter_value * (input_value + input_offset);
-              }
+            for (int in_ch=0; in_ch<input_depth; ++in_ch) {
+              int32_t input_value = input_values[input_shape.offset(0, in_y, in_x, in_ch)];
+              int32_t filter_value = filter_values[filter_shape.offset(out_ch, filter_y, filter_x, in_ch)];
+              sum += filter_value * (input_value + input_offset);
             }
           }
         }
         sum += bias_values[out_ch];
         int64_t half = 1LL << (30 + n);
-        int32_t scaled_sum = (int32_t)divide_by_shift((int64_t)sum * m0 + half, 31 + n);
-        sum = scaled_sum;
+        sum = (int32_t)(((int64_t)sum * m0 + half) >> (31 + n));
         sum += output_offset;
         sum = std::max(sum, activation_min);
         sum = std::min(sum, activation_max);
