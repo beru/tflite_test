@@ -20,13 +20,10 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\test_Conv2D.cpp">
+    <ClCompile Include="..\Classification.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\test_Conv2D_int8_int8.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\test_main.cpp">
+    <ClCompile Include="..\libs.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

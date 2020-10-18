@@ -16,8 +16,10 @@ TEST_CASE("Conv2D_int8_int8 input=1x1 filter=1x1 output=1x1")
   Shape output_shape(1, 1, 1, 1);
   int8_t output_values[1];
 
-  int32_t input_offset = 128;
-  int32_t output_offset = -128;
+  int32_t input_zero_point = 128;
+  int32_t output_zero_point = 128;
+  int32_t input_offset = input_zero_point;
+  int32_t output_offset = -output_zero_point;
   int32_t output_multiplier[] = {1<<30};
   int32_t output_shift[] = {30};
   int32_t activation_min = -128;
@@ -41,22 +43,30 @@ TEST_CASE("Conv2D_int8_int8 input=1x1 filter=1x1 output=1x1")
 TEST_CASE("Conv2D_int8_int8 input=1x1x1 filter=2x1x1 output=1x1x2")
 {
   Shape input_shape(1, 1, 1, 1);
-  int8_t input_values[] = { 1 - 128, };
-
   Shape filter_shape(2, 1, 1, 1);
-  int8_t filter_values[] = { 1.0f, -1.0f, };
-
-  int32_t bias_values[] = { -1, +123, };
-
   Shape output_shape(1, 1, 1, 2);
-  int8_t output_values[2];
 
-  int32_t input_offset = 128;
-  int32_t output_offset = -128;
-  int32_t output_multiplier[] = {1<<30};
+  int32_t input_zero_point = 128;
+  int32_t output_zero_point = 128;
+  int32_t input_offset = input_zero_point;
+  int32_t output_offset = -output_zero_point;
+  int32_t output_multiplier[] = {1 << 30};
   int32_t output_shift[] = {30};
   int32_t activation_min = -128;
   int32_t activation_max = +127;
+
+  int8_t input_values[] = {
+    int8_t(1 - input_zero_point),
+  };
+  int8_t filter_values[] = {
+    +1,
+    -1,
+  };
+  int32_t bias_values[] = {
+    -1,
+    +123,
+  };
+  int8_t output_values[2];
 
   Conv2D_int8_int8(
     input_shape, input_values,
@@ -71,10 +81,13 @@ TEST_CASE("Conv2D_int8_int8 input=1x1x1 filter=2x1x1 output=1x1x2")
   );
 
   int8_t expected_output_values[2] = {
-    0 - 128, 122 - 128,
+    int8_t(0 - output_zero_point),
+    int8_t(122 - output_zero_point),
   };
 
-  CHECK(std::equal(std::begin(output_values), std::end(output_values), std::begin(expected_output_values)));
+  CHECK(std::equal(std::begin(output_values),
+                   std::end(output_values),
+                   std::begin(expected_output_values)));
 }
 
 #if 0

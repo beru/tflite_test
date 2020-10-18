@@ -3,10 +3,11 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LocalDebuggerEnvironment>PATH=%PATH%;D:\projects\tensorflow\bazel-out\x64_windows-opt\bin\tensorflow\lite</LocalDebuggerEnvironment>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
+    <LocalDebuggerCommandArguments>efficientnet_lite0_int8_2_location1.tflite test.png</LocalDebuggerCommandArguments>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LocalDebuggerEnvironment>PATH=%PATH%;$(TensorFlowDir)\bazel-out\x64_windows-opt\bin\tensorflow\lite</LocalDebuggerEnvironment>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArguments>test.png</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>efficientnet_lite0_int8_2_location1.tflite test.png &gt; result.txt</LocalDebuggerCommandArguments>
   </PropertyGroup>
 </Project>

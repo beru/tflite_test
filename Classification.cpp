@@ -1,5 +1,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 
+#undef NDEBUG
+
 #include <iostream>
 #include <cstdio>
 #include <vector>
@@ -9,13 +11,19 @@
 #include <tensorflow/lite/interpreter.h>
 #include <tensorflow/lite/kernels/register.h>
 #include <tensorflow/lite/kernels/register_ref.h>
+#include <tensorflow/lite/kernels/internal/tensor_ctypes.h>
+#include <tensorflow/lite/kernels/padding.h>
 #include <tensorflow/lite/model.h>
 #include <tensorflow/lite/optional_debug_tools.h>
+#include <tensorflow/lite/builtin_ops.h>
+#include <tensorflow/lite/builtin_op_data.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-void print(TfLiteIntArray* arr)
+#include "cnn.h"
+
+void print(const TfLiteIntArray* arr)
 {
   for (int i=0; i<arr->size; ++i) {
     printf("%d ", arr->data[i]);
@@ -51,14 +59,94 @@ int get_type_bytes(TfLiteType type)
   return -1;
 }
 
-void write_to_file(const char* filename, const TfLiteTensor* tensor)
+void filename_append(char* buff, const char* path, const char* trail)
 {
-  FILE* f = fopen(filename, "wb");
+  char drive[_MAX_DRIVE];
+  char dir[_MAX_DIR];
+  char file[_MAX_FNAME];
+  char ext[_MAX_EXT];
+  _splitpath(path, drive, dir, file, ext);
+  strcat(file, trail);
+  _makepath(buff, drive, dir, file, ext);
+}
+
+void write_to_file(const char* filepath, const TfLiteFloatArray* arr)
+{
+  FILE* f = fopen(filepath, "wb");
+  int32_t sz = arr->size;
+  fwrite(&sz, sizeof(sz), 1, f);
+  fwrite(arr->data, sizeof(arr->data[0]), sz, f);
+  fclose(f);
+}
+
+void write_to_file(const char* filepath, const TfLiteIntArray* arr)
+{
+  FILE* f = fopen(filepath, "wb");
+  int32_t sz = arr->size;
+  fwrite(&sz, sizeof(sz), 1, f);
+  fwrite(arr->data, sizeof(arr->data[0]), sz, f);
+  fclose(f);
+}
+
+void write_to_file(const char* filepath, const TfLiteTensor* tensor)
+{
+  FILE* f = fopen(filepath, "wb");
+
+  if (tensor->quantization.type == kTfLiteAffineQuantization) {
+    auto affine_quantization = (const TfLiteAffineQuantization*)tensor->quantization.params;
+    char buff[256];
+    filename_append(buff, filepath, "_quant_scale");
+    write_to_file(buff, affine_quantization->scale);
+    filename_append(buff, filepath, "_quant_zero_point");
+    write_to_file(buff, affine_quantization->zero_point);
+  }
+
   const TfLiteIntArray* dims = tensor->dims;
   int num_elements = calc_num_elements(dims);
   int type_bytes = get_type_bytes(tensor->type);
   fwrite(tensor->data.data, type_bytes, num_elements, f);
   fclose(f);
+}
+
+int calc_padding_same_size(int in_size, int stride)
+{
+  return (int)ceilf((float)in_size / (float)stride);
+}
+
+Shape toShape(const TfLiteIntArray* arr)
+{
+  assert(arr->size == 4);
+  Shape ret;
+  ret.number = arr->data[0];
+  ret.height = arr->data[1];
+  ret.width = arr->data[2];
+  ret.channel = arr->data[3];
+  return ret;
+}
+
+void quantize(
+  float input_scale,
+  float output_scale,
+  const TfLiteFloatArray* filter_scale,
+  std::vector<int32_t>& output_multiplier,
+  std::vector<int32_t>& output_shift
+  )
+{
+  const size_t sz = filter_scale->size;
+  const float* data = filter_scale->data;
+  output_multiplier.resize(sz);
+  output_shift.resize(sz);
+  double io_scale = (double)input_scale / (double)output_scale;
+  for (size_t i=0; i<sz; ++i) {
+    double f = data[i];
+    f *= io_scale;
+    int shift;
+    double f2 = std::frexp(f, &shift);
+    int m0 = ((1 << 31) - 1) * f2;
+    int n = -shift;
+    output_multiplier[i] = m0;
+    output_shift[i] = n;
+  }
 }
 
 int main(int argc, char* argv[])
@@ -91,19 +179,17 @@ int main(int argc, char* argv[])
   
   TfLiteTensor* input_tensor = interpreter->tensor(inputs[0]);
   TfLiteTensor* output_tensor = interpreter->tensor(outputs[0]);
-  TfLiteIntArray* input_dim = input_tensor->dims;
-  TfLiteIntArray* output_dim = output_tensor->dims;
+  const TfLiteIntArray* input_dim = input_tensor->dims;
+  const TfLiteIntArray* output_dim = output_tensor->dims;
 
-  const TfLiteQuantization& input_quantization = input_tensor->quantization;
-  const TfLiteQuantization& output_quantization = output_tensor->quantization;
-  assert(input_quantization.type == kTfLiteAffineQuantization);
-  assert(output_quantization.type == kTfLiteAffineQuantization);
-  const TfLiteAffineQuantization* input_affine_quantization = (const TfLiteAffineQuantization*)input_quantization.params;
-  const TfLiteAffineQuantization* output_affine_quantization = (const TfLiteAffineQuantization*)output_quantization.params;
-  float input_scale = input_affine_quantization->scale->data[0];
-  int input_zero_point = input_affine_quantization->zero_point->data[0];
-  float output_scale = output_affine_quantization->scale->data[0];
-  int output_zero_point = output_affine_quantization->zero_point->data[0];
+  assert(input_tensor->quantization.type == kTfLiteAffineQuantization);
+  assert(output_tensor->quantization.type == kTfLiteAffineQuantization);
+  const TfLiteAffineQuantization* input_quantization_params = (const TfLiteAffineQuantization*)input_tensor->quantization.params;
+  const TfLiteAffineQuantization* output_quantization_params = (const TfLiteAffineQuantization*)output_tensor->quantization.params;
+  float input_scale = input_quantization_params->scale->data[0];
+  int input_zero_point = input_quantization_params->zero_point->data[0];
+  float output_scale = output_quantization_params->scale->data[0];
+  int output_zero_point = output_quantization_params->zero_point->data[0];
 
   printf("input_dim : ");
   print(input_dim);
@@ -111,7 +197,8 @@ int main(int argc, char* argv[])
   printf("output_dim : ");
   print(output_dim);
   printf("\n");
-  auto input_data = interpreter->typed_input_tensor<uint8_t>(0);
+
+  auto graph_input_data = interpreter->typed_input_tensor<uint8_t>(0);
   auto output_data = interpreter->typed_output_tensor<int8_t>(0);
   int input_width = input_dim->data[1];
   int input_height = input_dim->data[2];
@@ -123,10 +210,11 @@ int main(int argc, char* argv[])
   size_t num_nodes = graph.nodes_size();
   const auto& nodes = graph.nodes_and_registration();
 
-  int node0_output_idx = nodes[0].first.outputs->data[0];
-  //int node1_output_idx = nodes[1].first.outputs->data[0];
+  const TfLiteNode& node0 = nodes[0].first;
+  const TfLiteNode& node1 = nodes[1].first;
+  const TfLiteRegistration& node1_reg = nodes[1].second;
+  int node0_output_idx = node0.outputs->data[0];
   TfLiteTensor* node0_output_tensor = interpreter->tensor(node0_output_idx);
-  output_affine_quantization = (const TfLiteAffineQuantization*)(node0_output_tensor->quantization.params);
 
   int x,y,n;
   unsigned char *data = stbi_load(imageFilePath, &x, &y, &n, input_channels);
@@ -143,19 +231,76 @@ int main(int argc, char* argv[])
     return 0;
   }
 
-  memcpy(input_data, data, input_width * input_height * input_channels);
+  memcpy(graph_input_data, data, input_width * input_height * input_channels);
   stbi_image_free(data);
 
   status = interpreter->Invoke();
 
-  const TfLiteIntArray* node1_inputs = nodes[1].first.inputs;
-  for (int i=0; i<node1_inputs->size; ++i) {
-    char fname[64];
-    sprintf(fname, "node1_input%d.dat", i);
-    int idx = node1_inputs->data[i];
-    write_to_file(fname, interpreter->tensor(idx));
-  }
+  assert(node1_reg.builtin_code == kTfLiteBuiltinConv2d);
+  const TfLiteConvParams* params = (const TfLiteConvParams*)node1.builtin_data;
+  const TfLiteIntArray* node1_inputs = node1.inputs;
+  const TfLiteIntArray* node1_output = node1.outputs;
+  assert(node1_inputs->size == 3);
+  input_tensor = interpreter->tensor(node1_inputs->data[0]);
+  const TfLiteTensor* filter_tensor = interpreter->tensor(node1_inputs->data[1]);
+  const TfLiteTensor* bias_tensor = interpreter->tensor(node1_inputs->data[2]);
+  Shape input_shape = toShape(input_tensor->dims);
+  Shape filter_shape = toShape(filter_tensor->dims);
+  assert(bias_tensor->dims->size == 1);
+  int bias_num_elements = bias_tensor->dims->data[0];
+  Shape output_shape = toShape(output_tensor->dims);
+  assert(bias_num_elements == output_shape.channel);
+  assert(input_shape.channel == filter_shape.channel);
+  assert(filter_shape.number == output_shape.channel);
+
+  int stride_width = params->stride_width;
+  int stride_height = params->stride_height;
+  int padding_width_offset;
+  int padding_height_offset;
+  int padding_width = tflite::ComputePaddingWithOffset(params->stride_width, params->dilation_width_factor, input_shape.width, filter_shape.width, output_shape.width, &padding_width_offset);
+  int padding_height = tflite::ComputePaddingWithOffset(params->stride_height, params->dilation_height_factor, input_shape.height, filter_shape.height, output_shape.height, &padding_height_offset);
+
+  input_quantization_params = (const TfLiteAffineQuantization*)(input_tensor->quantization.params);
+  output_quantization_params = (const TfLiteAffineQuantization*)(output_tensor->quantization.params);
+  assert(input_quantization_params->scale->size == 1);
+  assert(output_quantization_params->scale->size == 1);
+  const TfLiteAffineQuantization* filter_quantization_params = (const TfLiteAffineQuantization*)(filter_tensor->quantization.params);
+  assert(filter_quantization_params->scale->size == output_channels);
+  assert(filter_quantization_params->zero_point->size == output_channels);
+
+  input_scale = input_quantization_params->scale->data[0];
+  input_zero_point = input_quantization_params->zero_point->data[0];
+  output_scale = output_quantization_params->scale->data[0];
+  output_zero_point = output_quantization_params->zero_point->data[0];
+  
+  int input_offset = -input_zero_point;
+  int output_offset = output_zero_point;
+  int activation_min = -128;
+  int activation_max = 127;
+  std::vector<int32_t> output_multiplier;
+  std::vector<int32_t> output_shift;
+  quantize(input_scale, output_scale, filter_quantization_params->scale, output_multiplier, output_shift);
+
+  const int8_t* input_data = tflite::GetTensorData<int8_t>(input_tensor);
+  const int8_t* filter_data = tflite::GetTensorData<int8_t>(filter_tensor);
+  const int32_t* bias_data = tflite::GetTensorData<int32_t>(bias_tensor);
+  std::vector<int8_t> output(output_shape.num_elements());
+  Conv2D_int8_int8(
+    input_shape, input_data,
+    filter_shape, filter_data,
+    bias_data,
+    output_shape, &output[0],
+    stride_height, stride_width,
+    padding_height, padding_width,
+    input_offset, output_offset,
+    &output_multiplier[0], &output_shift[0],
+    activation_min, activation_max);
+
   write_to_file("node1_output.dat", output_tensor);
+
+  FILE* f = fopen("node1_output_ref.dat", "wb");
+  fwrite(&output[0], 1, output_shape.num_elements(), f);
+  fclose(f);
 
   return 0;
 }

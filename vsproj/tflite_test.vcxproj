@@ -142,12 +142,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\test_Conv2D_int8_int8.cpp" />
-    <ClCompile Include="..\test_Conv2D.cpp" />
-    <ClCompile Include="..\test_main.cpp" />
+    <ClInclude Include="..\cnn.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\cnn.h" />
+    <ClCompile Include="..\Classification.cpp" />
+    <ClCompile Include="..\libs.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
