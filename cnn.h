@@ -144,6 +144,7 @@ void Conv2D_int8_int8(
         int32_t sum = 0;
         const int32_t m0 = output_multiplier[out_ch];
         const int32_t n = output_shift[out_ch];
+        assert(n >= 0);
         for (int filter_y=0; filter_y<filter_height; ++filter_y) {
           const int in_y = in_y_start + filter_y;
           if (in_y < 0 || in_y >= input_height)

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<meta charset="UTF-8">
+<head>
+<title>ComputePaddingWithOffset</title>
+<style>
+
+input {
+  text-align : right;
+  width : 6em;
+  margin : 0.5em;
+  padding : 0.1em;
+}
+
+</style>
+</head>
+<body>
+
+<label for="tentacles">stride:</label><input type="number" id="stride" min="1" max="16" value="1"><br>
+
+<label for="dilation_rate">dilation_rate:</label><input type="number" id="dilation_rate" min="1" max="16" value="1"><br>
+
+<label for="in_size">in_size:</label><input type="number" id="in_size" min="1" max="256" value="1"><br>
+
+<label for="filter_size">filter_size:</label><input type="number" id="filter_size" min="1" max="256" value="1"><br>
+
+<label for="out_size">out_size:</label><input type="number" id="out_size" min="1" max="256" value="1"><br>
+<br>
+
+<label for="offset">offset:</label><input type="number" id="offset" readonly><br>
+<label for="padding">padding:</label><input type="number" id="padding" readonly>
+
+<script>
+
+window.stride.onchange =
+window.dilation_rate.onchange =
+window.in_size.onchange = 
+window.filter_size.onchange = 
+window.out_size.onchange = function () {
+
+  var stride = window.stride.value;
+  var dilation_rate = window.dilation_rate.value;
+  var in_size = window.in_size.value;
+  var filter_size = window.filter_size.value;
+  var out_size = window.out_size.value;
+
+  var effective_filter_size = (filter_size - 1) * dilation_rate + 1;
+  var total_padding =
+      ((out_size - 1) * stride + effective_filter_size - in_size);
+  total_padding = total_padding > 0 ? total_padding : 0;
+  var offset = total_padding % 2;
+  var padding = Math.floor(total_padding / 2);
+  
+  window.offset.value = offset;
+  window.padding.value = padding;
+
+
+}
+
+
+</script>
+
+
+</body>
+</html>
