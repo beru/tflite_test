@@ -124,7 +124,7 @@ Shape toShape(const TfLiteIntArray* arr)
   return ret;
 }
 
-void quantize(
+void quantize_filter_scale(
   float input_scale,
   float output_scale,
   const TfLiteFloatArray* filter_scale,
@@ -146,6 +146,108 @@ void quantize(
     int n = -shift;
     output_multiplier[i] = m0;
     output_shift[i] = n;
+  }
+}
+
+void emulate_node_Conv2D(
+  tflite::Interpreter* interpreter,
+  size_t node_idx,
+  const TfLiteNode& node,
+  const TfLiteRegistration& node_reg)
+{
+  const TfLiteConvParams* params = (const TfLiteConvParams*)node.builtin_data;
+  const TfLiteIntArray* node_inputs = node.inputs;
+  const TfLiteIntArray* node_outputs = node.outputs;
+  assert(node_inputs->size == 3);
+  assert(node_outputs->size == 1);
+  TfLiteTensor* input_tensor = interpreter->tensor(node_inputs->data[0]);
+  const TfLiteTensor* filter_tensor = interpreter->tensor(node_inputs->data[1]);
+  const TfLiteTensor* bias_tensor = interpreter->tensor(node_inputs->data[2]);
+  const TfLiteTensor* output_tensor = interpreter->tensor(node_outputs->data[0]);
+  Shape input_shape = toShape(input_tensor->dims);
+  Shape filter_shape = toShape(filter_tensor->dims);
+  assert(bias_tensor->dims->size == 1);
+  int bias_num_elements = bias_tensor->dims->data[0];
+
+  Shape output_shape = toShape(output_tensor->dims);
+  assert(bias_num_elements == output_shape.channel);
+  assert(input_shape.channel == filter_shape.channel);
+  assert(filter_shape.number == output_shape.channel);
+
+  int stride_width = params->stride_width;
+  int stride_height = params->stride_height;
+  int padding_width_offset;
+  int padding_height_offset;
+  int padding_width = tflite::ComputePaddingWithOffset(params->stride_width, params->dilation_width_factor, input_shape.width, filter_shape.width, output_shape.width, &padding_width_offset);
+  int padding_height = tflite::ComputePaddingWithOffset(params->stride_height, params->dilation_height_factor, input_shape.height, filter_shape.height, output_shape.height, &padding_height_offset);
+
+  const TfLiteAffineQuantization* input_quantization_params = (const TfLiteAffineQuantization*)(input_tensor->quantization.params);
+  const TfLiteAffineQuantization* output_quantization_params = (const TfLiteAffineQuantization*)(output_tensor->quantization.params);
+  assert(input_quantization_params->scale->size == 1);
+  assert(output_quantization_params->scale->size == 1);
+  const TfLiteAffineQuantization* filter_quantization_params = (const TfLiteAffineQuantization*)(filter_tensor->quantization.params);
+  assert(filter_quantization_params->scale->size == output_shape.channel);
+  assert(filter_quantization_params->zero_point->size == output_shape.channel);
+
+  float input_scale = input_quantization_params->scale->data[0];
+  int input_zero_point = input_quantization_params->zero_point->data[0];
+  float output_scale = output_quantization_params->scale->data[0];
+  int output_zero_point = output_quantization_params->zero_point->data[0];
+  
+  int input_offset = -input_zero_point;
+  int output_offset = output_zero_point;
+  int activation_min = -128;
+  int activation_max = 127;
+  std::vector<int32_t> output_multiplier;
+  std::vector<int32_t> output_shift;
+  quantize_filter_scale(
+    input_scale, output_scale,
+    filter_quantization_params->scale,
+    output_multiplier, output_shift);
+
+  const int8_t* input_data = tflite::GetTensorData<int8_t>(input_tensor);
+  const int8_t* filter_data = tflite::GetTensorData<int8_t>(filter_tensor);
+  const int32_t* bias_data = tflite::GetTensorData<int32_t>(bias_tensor);
+  std::vector<int8_t> output(output_shape.num_elements());
+  Conv2D_int8_int8(
+    input_shape, input_data,
+    filter_shape, filter_data,
+    bias_data,
+    output_shape, &output[0],
+    stride_height, stride_width,
+    padding_height, padding_width,
+    input_offset, output_offset,
+    &output_multiplier[0], &output_shift[0],
+    activation_min, activation_max);
+
+  char filename[64];
+
+  sprintf(filename, "node%d_output_ref.dat", node_idx);
+  write_to_file(filename, output_tensor);
+
+  sprintf(filename, "node%d_output_emu.dat", node_idx);
+  FILE* f = fopen(filename, "wb");
+  fwrite(&output[0], 1, output_shape.num_elements(), f);
+  fclose(f);
+}
+
+void emulate_node(tflite::Interpreter* interpreter, size_t node_idx)
+{
+  const tflite::Subgraph& graph = interpreter->primary_subgraph();
+  size_t num_nodes = graph.nodes_size();
+  assert(node_idx < num_nodes);
+  const auto& nodes = graph.nodes_and_registration();
+  const auto& pair = nodes[node_idx];
+  const TfLiteNode& node = pair.first;
+  const TfLiteRegistration& node_reg = pair.second;
+
+  switch (node_reg.builtin_code) {
+  case kTfLiteBuiltinConv2d:
+    emulate_node_Conv2D(interpreter, node_idx, node, node_reg);
+    break;
+  default:
+    assert(false);
+    break;
   }
 }
 
@@ -171,50 +273,23 @@ int main(int argc, char* argv[])
 //  tflite::PrintInterpreterState(interpreter.get());
 
   TfLiteStatus status = interpreter->AllocateTensors();
-  auto inputs = interpreter->inputs();
-  auto outputs = interpreter->outputs();
 
   // efficientnet-lite0-int8.tflite
-  const tflite::Subgraph& graph = interpreter->primary_subgraph();
   
+  auto inputs = interpreter->inputs();
   TfLiteTensor* input_tensor = interpreter->tensor(inputs[0]);
-  TfLiteTensor* output_tensor = interpreter->tensor(outputs[0]);
   const TfLiteIntArray* input_dim = input_tensor->dims;
-  const TfLiteIntArray* output_dim = output_tensor->dims;
-
   assert(input_tensor->quantization.type == kTfLiteAffineQuantization);
-  assert(output_tensor->quantization.type == kTfLiteAffineQuantization);
   const TfLiteAffineQuantization* input_quantization_params = (const TfLiteAffineQuantization*)input_tensor->quantization.params;
-  const TfLiteAffineQuantization* output_quantization_params = (const TfLiteAffineQuantization*)output_tensor->quantization.params;
   float input_scale = input_quantization_params->scale->data[0];
   int input_zero_point = input_quantization_params->zero_point->data[0];
-  float output_scale = output_quantization_params->scale->data[0];
-  int output_zero_point = output_quantization_params->zero_point->data[0];
-
   printf("input_dim : ");
   print(input_dim);
   printf("\n");
-  printf("output_dim : ");
-  print(output_dim);
-  printf("\n");
-
   auto graph_input_data = interpreter->typed_input_tensor<uint8_t>(0);
-  auto output_data = interpreter->typed_output_tensor<int8_t>(0);
   int input_width = input_dim->data[1];
   int input_height = input_dim->data[2];
   int input_channels = input_dim->data[3];
-  int output_width = output_dim->data[1];
-  int output_height = output_dim->data[2];
-  int output_channels = output_dim->data[3];
-
-  size_t num_nodes = graph.nodes_size();
-  const auto& nodes = graph.nodes_and_registration();
-
-  const TfLiteNode& node0 = nodes[0].first;
-  const TfLiteNode& node1 = nodes[1].first;
-  const TfLiteRegistration& node1_reg = nodes[1].second;
-  int node0_output_idx = node0.outputs->data[0];
-  TfLiteTensor* node0_output_tensor = interpreter->tensor(node0_output_idx);
 
   int x,y,n;
   unsigned char *data = stbi_load(imageFilePath, &x, &y, &n, input_channels);
@@ -236,71 +311,22 @@ int main(int argc, char* argv[])
 
   status = interpreter->Invoke();
 
-  assert(node1_reg.builtin_code == kTfLiteBuiltinConv2d);
-  const TfLiteConvParams* params = (const TfLiteConvParams*)node1.builtin_data;
-  const TfLiteIntArray* node1_inputs = node1.inputs;
-  const TfLiteIntArray* node1_output = node1.outputs;
-  assert(node1_inputs->size == 3);
-  input_tensor = interpreter->tensor(node1_inputs->data[0]);
-  const TfLiteTensor* filter_tensor = interpreter->tensor(node1_inputs->data[1]);
-  const TfLiteTensor* bias_tensor = interpreter->tensor(node1_inputs->data[2]);
-  Shape input_shape = toShape(input_tensor->dims);
-  Shape filter_shape = toShape(filter_tensor->dims);
-  assert(bias_tensor->dims->size == 1);
-  int bias_num_elements = bias_tensor->dims->data[0];
-  Shape output_shape = toShape(output_tensor->dims);
-  assert(bias_num_elements == output_shape.channel);
-  assert(input_shape.channel == filter_shape.channel);
-  assert(filter_shape.number == output_shape.channel);
+  emulate_node(interpreter.get(), 1);
 
-  int stride_width = params->stride_width;
-  int stride_height = params->stride_height;
-  int padding_width_offset;
-  int padding_height_offset;
-  int padding_width = tflite::ComputePaddingWithOffset(params->stride_width, params->dilation_width_factor, input_shape.width, filter_shape.width, output_shape.width, &padding_width_offset);
-  int padding_height = tflite::ComputePaddingWithOffset(params->stride_height, params->dilation_height_factor, input_shape.height, filter_shape.height, output_shape.height, &padding_height_offset);
-
-  input_quantization_params = (const TfLiteAffineQuantization*)(input_tensor->quantization.params);
-  output_quantization_params = (const TfLiteAffineQuantization*)(output_tensor->quantization.params);
-  assert(input_quantization_params->scale->size == 1);
-  assert(output_quantization_params->scale->size == 1);
-  const TfLiteAffineQuantization* filter_quantization_params = (const TfLiteAffineQuantization*)(filter_tensor->quantization.params);
-  assert(filter_quantization_params->scale->size == output_channels);
-  assert(filter_quantization_params->zero_point->size == output_channels);
-
-  input_scale = input_quantization_params->scale->data[0];
-  input_zero_point = input_quantization_params->zero_point->data[0];
-  output_scale = output_quantization_params->scale->data[0];
-  output_zero_point = output_quantization_params->zero_point->data[0];
-  
-  int input_offset = -input_zero_point;
-  int output_offset = output_zero_point;
-  int activation_min = -128;
-  int activation_max = 127;
-  std::vector<int32_t> output_multiplier;
-  std::vector<int32_t> output_shift;
-  quantize(input_scale, output_scale, filter_quantization_params->scale, output_multiplier, output_shift);
-
-  const int8_t* input_data = tflite::GetTensorData<int8_t>(input_tensor);
-  const int8_t* filter_data = tflite::GetTensorData<int8_t>(filter_tensor);
-  const int32_t* bias_data = tflite::GetTensorData<int32_t>(bias_tensor);
-  std::vector<int8_t> output(output_shape.num_elements());
-  Conv2D_int8_int8(
-    input_shape, input_data,
-    filter_shape, filter_data,
-    bias_data,
-    output_shape, &output[0],
-    stride_height, stride_width,
-    padding_height, padding_width,
-    input_offset, output_offset,
-    &output_multiplier[0], &output_shift[0],
-    activation_min, activation_max);
-
-  write_to_file("node1_output.dat", output_tensor);
-
-  FILE* f = fopen("node1_output_ref.dat", "wb");
-  fwrite(&output[0], 1, output_shape.num_elements(), f);
-  fclose(f);
+  auto outputs = interpreter->outputs();
+  const TfLiteTensor* output_tensor = interpreter->tensor(outputs[0]);
+  const TfLiteIntArray* output_dim = output_tensor->dims;
+  assert(output_tensor->quantization.type == kTfLiteAffineQuantization);
+  const TfLiteAffineQuantization* output_quantization_params = (const TfLiteAffineQuantization*)output_tensor->quantization.params;
+  float output_scale = output_quantization_params->scale->data[0];
+  int output_zero_point = output_quantization_params->zero_point->data[0];
+  printf("output_dim : ");
+  print(output_dim);
+  printf("\n");
+  auto output_data = interpreter->typed_output_tensor<int8_t>(0);
+  int output_width = output_dim->data[1];
+  int output_height = output_dim->data[2];
+  int output_channels = output_dim->data[3];
 
   return 0;
 }
