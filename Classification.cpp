@@ -108,6 +108,14 @@ void write_to_file(const char* filepath, const TfLiteTensor* tensor)
   fclose(f);
 }
 
+template <typename T>
+void write_to_file(const char* filepath, const T* data, size_t len)
+{
+  FILE* f = fopen(filepath, "wb");
+  fwrite(data, sizeof(T), len, f);
+  fclose(f);
+}
+
 int calc_padding_same_size(int in_size, int stride)
 {
   return (int)ceilf((float)in_size / (float)stride);
@@ -168,7 +176,6 @@ void emulate_node_Conv2D(
   Shape filter_shape = toShape(filter_tensor->dims);
   assert(bias_tensor->dims->size == 1);
   int bias_num_elements = bias_tensor->dims->data[0];
-
   Shape output_shape = toShape(output_tensor->dims);
   assert(bias_num_elements == output_shape.channel);
   assert(input_shape.channel == filter_shape.channel);
@@ -221,14 +228,89 @@ void emulate_node_Conv2D(
     activation_min, activation_max);
 
   char filename[64];
-
   sprintf(filename, "node%d_output_ref.dat", node_idx);
   write_to_file(filename, output_tensor);
-
   sprintf(filename, "node%d_output_emu.dat", node_idx);
-  FILE* f = fopen(filename, "wb");
-  fwrite(&output[0], 1, output_shape.num_elements(), f);
-  fclose(f);
+  write_to_file(filename, &output[0], output_shape.num_elements());
+}
+
+void emulate_node_DepthwiseConv2d(
+  tflite::Interpreter* interpreter,
+  size_t node_idx,
+  const TfLiteNode& node,
+  const TfLiteRegistration& node_reg)
+{
+  const TfLiteDepthwiseConvParams* params = (const TfLiteDepthwiseConvParams*)node.builtin_data;
+  const TfLiteIntArray* node_inputs = node.inputs;
+  const TfLiteIntArray* node_outputs = node.outputs;
+  assert(node_inputs->size == 3);
+  assert(node_outputs->size == 1);
+  TfLiteTensor* input_tensor = interpreter->tensor(node_inputs->data[0]);
+  const TfLiteTensor* weights_tensor = interpreter->tensor(node_inputs->data[1]);
+  const TfLiteTensor* bias_tensor = interpreter->tensor(node_inputs->data[2]);
+  const TfLiteTensor* output_tensor = interpreter->tensor(node_outputs->data[0]);
+
+  Shape input_shape = toShape(input_tensor->dims);
+  Shape weights_shape = toShape(weights_tensor->dims);
+  assert(bias_tensor->dims->size == 1);
+  int bias_num_elements = bias_tensor->dims->data[0];
+  Shape output_shape = toShape(output_tensor->dims);
+  assert(bias_num_elements == output_shape.channel);
+  assert(input_shape.channel == weights_shape.channel);
+  assert(weights_shape.number == 1);
+
+  int stride_width = params->stride_width;
+  int stride_height = params->stride_height;
+  int padding_width_offset;
+  int padding_height_offset;
+  int padding_width = tflite::ComputePaddingWithOffset(params->stride_width, params->dilation_width_factor, input_shape.width, weights_shape.width, output_shape.width, &padding_width_offset);
+  int padding_height = tflite::ComputePaddingWithOffset(params->stride_height, params->dilation_height_factor, input_shape.height, weights_shape.height, output_shape.height, &padding_height_offset);
+
+  const TfLiteAffineQuantization* input_quantization_params = (const TfLiteAffineQuantization*)(input_tensor->quantization.params);
+  const TfLiteAffineQuantization* output_quantization_params = (const TfLiteAffineQuantization*)(output_tensor->quantization.params);
+  assert(input_quantization_params->scale->size == 1);
+  assert(output_quantization_params->scale->size == 1);
+  const TfLiteAffineQuantization* weights_quantization_params = (const TfLiteAffineQuantization*)(weights_tensor->quantization.params);
+  assert(weights_quantization_params->scale->size == output_shape.channel);
+  assert(weights_quantization_params->zero_point->size == output_shape.channel);
+
+  float input_scale = input_quantization_params->scale->data[0];
+  int input_zero_point = input_quantization_params->zero_point->data[0];
+  float output_scale = output_quantization_params->scale->data[0];
+  int output_zero_point = output_quantization_params->zero_point->data[0];
+  
+  int input_offset = -input_zero_point;
+  int output_offset = output_zero_point;
+  int activation_min = -128;
+  int activation_max = 127;
+  std::vector<int32_t> output_multiplier;
+  std::vector<int32_t> output_shift;
+  quantize_filter_scale(
+    input_scale, output_scale,
+    weights_quantization_params->scale,
+    output_multiplier, output_shift);
+
+  const int8_t* input_data = tflite::GetTensorData<int8_t>(input_tensor);
+  const int8_t* weights_data = tflite::GetTensorData<int8_t>(weights_tensor);
+  const int32_t* bias_data = tflite::GetTensorData<int32_t>(bias_tensor);
+  std::vector<int8_t> output(output_shape.num_elements());
+
+  DepthwiseConv2D_int8_int8(
+    input_shape, input_data,
+    weights_shape, weights_data,
+    bias_data,
+    output_shape, &output[0],
+    stride_height, stride_width,
+    padding_height, padding_width,
+    input_offset, output_offset,
+    &output_multiplier[0], &output_shift[0],
+    activation_min, activation_max);
+
+  char filename[64];
+  sprintf(filename, "node%d_output_ref.dat", node_idx);
+  write_to_file(filename, output_tensor);
+  sprintf(filename, "node%d_output_emu.dat", node_idx);
+  write_to_file(filename, &output[0], output_shape.num_elements());
 }
 
 void emulate_node(tflite::Interpreter* interpreter, size_t node_idx)
@@ -242,8 +324,17 @@ void emulate_node(tflite::Interpreter* interpreter, size_t node_idx)
   const TfLiteRegistration& node_reg = pair.second;
 
   switch (node_reg.builtin_code) {
+  //case kTfLiteBuiltinAdd:
+  //  break;
+  //case kTfLiteBuiltinAveragePool2d:
+  //  break;
+  //case kTfLiteBuiltinConcatenation:
+  //  break;
   case kTfLiteBuiltinConv2d:
     emulate_node_Conv2D(interpreter, node_idx, node, node_reg);
+    break;
+  case kTfLiteBuiltinDepthwiseConv2d:
+    emulate_node_DepthwiseConv2d(interpreter, node_idx, node, node_reg);
     break;
   default:
     assert(false);
@@ -312,6 +403,7 @@ int main(int argc, char* argv[])
   status = interpreter->Invoke();
 
   emulate_node(interpreter.get(), 1);
+  emulate_node(interpreter.get(), 2);
 
   auto outputs = interpreter->outputs();
   const TfLiteTensor* output_tensor = interpreter->tensor(outputs[0]);

@@ -8,6 +8,6 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LocalDebuggerEnvironment>PATH=%PATH%;$(TensorFlowDir)\bazel-out\x64_windows-opt\bin\tensorflow\lite</LocalDebuggerEnvironment>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArguments>efficientnet_lite0_int8_2_location1.tflite test.png &gt; result.txt</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>efficientnet_lite0_int8_2_location2.tflite test.png &gt; result.txt</LocalDebuggerCommandArguments>
   </PropertyGroup>
 </Project>
