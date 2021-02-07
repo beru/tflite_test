@@ -1,4 +1,3 @@
-
 ## TensorFlow Lite を Windows でビルドする方法について
 
 https://www.tensorflow.org/install/source_windows
@@ -13,12 +12,37 @@ https://qiita.com/na0ki_ikeda/items/4c34db69fc6c9f16673a
 bazel build -c opt --cxxopt=--std=c++11 tensorflow/lite:tensorflowlite
 ```
 
-`BuiltinOpResolver` の代わりに `BuiltinRefOpResolver` を使う場合は、
-`tensorflow/lite/BUILD` ファイルの `tflite_cc_shared_object` の `deps` に
+## How to build TensorFlow Lite on Linux
+
+https://www.tensorflow.org/install/source#setup_for_linux_and_macos
+
+Follow the instructions.
+
+After `./configure`, you can build `libtensorflowlite.so` with below command.
+
+```
+bazel build -c opt --cxxopt=--std=c++11 tensorflow/lite:tensorflowlite
+```
+
+You may find the library file inside `bazel-bin/tensorflow/lite` folder.
+
+### gcc CLI build
+
+https://qiita.com/iwatake2222/items/d998df1981d46285df62
+
+```
+gcc Classification.cpp -I. -I./tensorflow -I./tensorflow/lite/tools/make/downloads -I./tensorflow/lite/tools/make/downloads/eigen -I./tensorflow/lite/tools/make/downloads/absl -I./tensorflow/lite/tools/make/downloads/gemmlowp -I./tensorlow/lite/tools/make/downloads/neon_2_sse -I./tensorflow/lite/tools/make/downloads/farmhash/src -I./tensorflow/lite/tools/make/downloads/flatbuffers/include  -std=c++11 -lstdc++ -ltensorflowlite -lm -L./
+```
+
+## How to use BuiltinRefOpResolver insted of BuiltinOpResolver
+
+modify `tensorflow/lite/BUILD` file,
+add below line to `deps` attribute of `tflite_cc_shared_object` rule.
 ```
         "//tensorflow/lite/kernels:reference_ops",
 ```
-を追加してからビルドする。
+
+then, build the library with bazel.
 
 ## Bazel
 
