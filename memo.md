@@ -10,6 +10,13 @@ https://qiita.com/na0ki_ikeda/items/4c34db69fc6c9f16673a
 
 ```
 bazel build -c opt --cxxopt=--std=c++11 tensorflow/lite:tensorflowlite
+
+```
+
+```
+mkdir build
+cd build
+cmake -DCMAKE_BUILD_TYPE=Release -G "Visual Studio 16 2019" -A x64 ..
 ```
 
 ## How to build TensorFlow Lite on Linux
