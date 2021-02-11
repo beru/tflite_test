@@ -41,7 +41,7 @@ https://qiita.com/iwatake2222/items/d998df1981d46285df62
 gcc Classification.cpp -I. -I./tensorflow -I./tensorflow/lite/tools/make/downloads -I./tensorflow/lite/tools/make/downloads/eigen -I./tensorflow/lite/tools/make/downloads/absl -I./tensorflow/lite/tools/make/downloads/gemmlowp -I./tensorlow/lite/tools/make/downloads/neon_2_sse -I./tensorflow/lite/tools/make/downloads/farmhash/src -I./tensorflow/lite/tools/make/downloads/flatbuffers/include  -std=c++11 -lstdc++ -ltensorflowlite -lm -L./
 ```
 
-## How to use BuiltinRefOpResolver insted of BuiltinOpResolver
+## How to use BuiltinRefOpResolver
 
 modify `tensorflow/lite/BUILD` file,
 add below line to `deps` attribute of `tflite_cc_shared_object` rule.
@@ -50,6 +50,15 @@ add below line to `deps` attribute of `tflite_cc_shared_object` rule.
 ```
 
 then, build the library with bazel.
+
+When you construct InterpreterBuilder instance, specify BuiltinRefOpResolver instance as a resolver parameter.
+
+```cpp
+  // Build the interpreter
+  //tflite::ops::builtin::BuiltinOpResolver resolver;
+  tflite::ops::builtin::BuiltinRefOpResolver resolver;
+  tflite::InterpreterBuilder builder(*model, resolver);
+```
 
 ## Bazel
 
